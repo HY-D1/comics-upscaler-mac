@@ -1,0 +1,13 @@
+PyMuPDF          # PDF file processing
+ebooklib>=0.18.0
+mobi             # MOBI file processing
+Pillow>=10.0.0
+opencv-python    # Image processing
+python-dotenv    # Environment variables management
+requests         # HTTP requests
+zhipuai          # ZhipuAI API
+html2image       # HTML to image conversion
+beautifulsoup4   # HTML parsing 
+PyPDF2>=3.0.0
+PyYAML>=6.0.1
+pyinstaller>=6.3.0 
