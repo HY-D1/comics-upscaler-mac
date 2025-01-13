@@ -25,7 +25,7 @@ Comics Upscaler 是一个专门用于优化电子书（EPUB）图片质量的工
   - NVIDIA显卡（推荐）：支持CUDA加速
   - AMD显卡：仅支持在Linux系统下通过ROCm使用
   - Intel显卡：暂不支持GPU加速
-- [Final2x-core](https://github.com/Tohrusky/Final2x-core/releases) v3.0.0+ (用于图片超分辨率处理)
+- [Final2x-core](https://github.com/Tohrusky/Final2x-core/releases)（用于图片超分辨率处理）
 
 ## 📦 安装
 
@@ -141,6 +141,12 @@ python comics_upscale.py
    - A: AMD显卡仅支持在Linux系统下通过ROCm使用
    - A: Intel显卡暂不支持GPU加速
 
+## 致谢
+
+特别感谢以下项目的支持：
+
+- [Final2x-core](https://github.com/Tohrusky/Final2x-core/releases) - 提供强大的图像超分辨率处理能力
+
 ---
 
 <a id="en"></a>
@@ -168,7 +174,7 @@ Comics Upscaler is a specialized tool for enhancing image quality in electronic 
   - NVIDIA GPU (Recommended): Supports CUDA acceleration
   - AMD GPU: ROCm support on Linux systems only
   - Intel GPU: GPU acceleration not currently supported
-- [Final2x-core](https://github.com/Tohrusky/Final2x-core/releases) v3.0.0+ (for image super-resolution processing)
+- [Final2x-core](https://github.com/Tohrusky/Final2x-core/releases) (for image super-resolution processing)
 
 ## 📦 Installation
 
@@ -283,3 +289,9 @@ python comics_upscale.py
    - A: Windows systems currently only support NVIDIA GPU acceleration
    - A: AMD GPUs only supported through ROCm on Linux systems
    - A: Intel GPUs currently do not support GPU acceleration
+
+## Acknowledgments
+
+Special thanks to:
+
+- [Final2x-core](https://github.com/Tohrusky/Final2x-core/releases) - Providing powerful image super-resolution processing capabilities
