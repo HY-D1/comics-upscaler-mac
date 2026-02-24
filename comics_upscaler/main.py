@@ -114,7 +114,8 @@ def process_single_file(
                 output_file,
                 metadata,
                 config.upscale.target_long_edge,
-                config.epub.resize_to_original
+                config.epub.resize_to_original,
+                original_file  # 传递原始EPUB路径以保留结构
             )
             
             if result.success:

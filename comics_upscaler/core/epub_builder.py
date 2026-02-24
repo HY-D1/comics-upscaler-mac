@@ -10,6 +10,9 @@ import io
 import glob
 import re
 import os
+import shutil
+import zipfile
+import xml.etree.ElementTree as ET
 import concurrent.futures
 from multiprocessing import cpu_count
 
@@ -25,34 +28,24 @@ from ..models.data_models import (
 )
 
 class EPUBBuilder:
-    """EPUB构建器"""
+    """EPUB构建器 - 保留原始结构和内容"""
     
     def __init__(self):
         """初始化EPUB构建器"""
         config_manager = ConfigManager()
         self.image_processor = ImageProcessor(config_manager.config.upscale)
         self.file_manager = FileManager()
-        self.max_workers = cpu_count()  # 获取CPU核心数
+        self.max_workers = cpu_count()
     
     def _find_upscaled_image(self, project_dir: Path, image_name: str) -> Optional[Path]:
-        """查找超分辨率处理后的图片
-        
-        Args:
-            project_dir: 项目目录
-            image_name: 图片文件名
-            
-        Returns:
-            图片路径，如果找不到则返回None
-        """
+        """查找超分辨率处理后的图片"""
         try:
-            # 从文件名中提取基本名称（不含扩展名）
-            base_name = Path(image_name).stem  # e.g., "00074" or "page_0001"
+            base_name = Path(image_name).stem
             
             # 构建可能的文件名模式
-            # Final2x-core 会根据放大倍数添加前缀（如 2x-, 4x-）
             patterns = [
-                f"*{base_name}.*",           # 匹配任意前缀的 base_name
-                f"[0-9]x-{base_name}.*",     # 1x-, 2x-, 4x- 等前缀
+                f"*{base_name}.*",
+                f"[0-9]x-{base_name}.*",
             ]
             
             # 在所有batch目录中查找
@@ -72,12 +65,10 @@ class EPUBBuilder:
                     if matches:
                         all_matches.extend(matches)
             
-            # 如果找到匹配，返回第一个
             if all_matches:
                 return all_matches[0]
             
-            # 如果按文件名找不到，尝试在所有batch目录中搜索所有文件
-            # 并按文件名排序，尝试找到对应页码的文件
+            # 后备方案：按页码匹配
             all_files = []
             for batch_dir in project_dir.glob('upscaled/batch_*/outputs'):
                 if batch_dir.exists():
@@ -85,15 +76,12 @@ class EPUBBuilder:
                     all_files.extend(batch_dir.glob('*.jpg'))
             
             if all_files:
-                # 尝试从原始文件名中提取页码数字
                 page_match = re.search(r'(\d+)', base_name)
                 if page_match:
                     page_num = page_match.group(1)
-                    # 查找包含相同页码的文件
                     for f in all_files:
                         if page_num in f.stem:
                             return f
-                # 如果没有匹配到，返回第一个文件
                 return sorted(all_files)[0]
             
             return None
@@ -102,28 +90,133 @@ class EPUBBuilder:
             print(f"查找图片时出错: {str(e)}")
             return None
     
-    def _process_image_parallel(
-        self,
-        book: epub.EpubBook,
-        image: ProcessedImage,
-        page_num: int,
-        target_long_edge: int,
-        resize_to_original: bool
-    ) -> epub.EpubHtml:
-        """并行处理单个图片章节"""
-        try:
-            return self._create_image_chapter(
-                book,
-                image,
-                page_num,
-                target_long_edge,
-                resize_to_original
-            )
-        except Exception as e:
-            print(f"处理第 {page_num} 页时出错: {str(e)}")
-            raise
-
     def create_epub(
+        self,
+        images: List[ProcessedImage],
+        output_path: Path,
+        metadata: EPUBMetadata,
+        target_long_edge: int = 1872,
+        resize_to_original: bool = False,
+        original_epub_path: Optional[Path] = None
+    ) -> ProcessingResult:
+        """创建EPUB文件 - 保留原始结构和内容"""
+        try:
+            print("\n开始创建EPUB文件...")
+            
+            if original_epub_path and original_epub_path.exists():
+                # 使用新方法：复制并修改原始EPUB
+                return self._create_epub_from_original(
+                    images, output_path, original_epub_path, 
+                    target_long_edge, resize_to_original
+                )
+            else:
+                # 使用旧方法：重新创建EPUB（兼容性保留）
+                return self._create_epub_from_scratch(
+                    images, output_path, metadata, 
+                    target_long_edge, resize_to_original
+                )
+            
+        except Exception as e:
+            return ProcessingResult(
+                success=False,
+                message=f"EPUB创建失败: {str(e)}",
+                error=e
+            )
+    
+    def _create_epub_from_original(
+        self,
+        images: List[ProcessedImage],
+        output_path: Path,
+        original_epub_path: Path,
+        target_long_edge: int = 1872,
+        resize_to_original: bool = False
+    ) -> ProcessingResult:
+        """从原始EPUB创建，只替换图片"""
+        try:
+            print(f"复制原始EPUB: {original_epub_path}")
+            
+            # 创建临时目录
+            temp_dir = output_path.parent / f"temp_epub_{output_path.stem}"
+            if temp_dir.exists():
+                shutil.rmtree(temp_dir)
+            temp_dir.mkdir(parents=True)
+            
+            # 解压原始EPUB
+            with zipfile.ZipFile(original_epub_path, 'r') as zip_ref:
+                zip_ref.extractall(temp_dir)
+            
+            # 构建图片映射表
+            image_map = {}
+            for img in images:
+                project_dir = img.processed_path.parent.parent
+                upscaled_path = self._find_upscaled_image(project_dir, img.processed_path.name)
+                if upscaled_path:
+                    # 使用原始文件名作为键
+                    orig_filename = img.original_path.name
+                    image_map[orig_filename] = upscaled_path
+                    # 也添加 basename 作为键（用于不同扩展名的情况）
+                    image_map[Path(orig_filename).stem] = upscaled_path
+            
+            print(f"找到 {len(image_map)} 张超分辨率图片")
+            
+            # 替换图片
+            replaced_count = 0
+            for img_file in temp_dir.rglob('*'):
+                if img_file.is_file() and img_file.suffix.lower() in ['.jpg', '.jpeg', '.png']:
+                    # 尝试匹配
+                    upscaled_path = None
+                    if img_file.name in image_map:
+                        upscaled_path = image_map[img_file.name]
+                    elif img_file.stem in image_map:
+                        upscaled_path = image_map[img_file.stem]
+                    
+                    if upscaled_path and upscaled_path.exists():
+                        # 处理图片（调整尺寸）
+                        img = self.image_processor.load_image(upscaled_path)
+                        if img:
+                            if resize_to_original:
+                                # 保持原始尺寸
+                                pass
+                            else:
+                                # 调整到目标尺寸
+                                width, height = img.size
+                                if max(width, height) > target_long_edge:
+                                    ratio = target_long_edge / max(width, height)
+                                    new_size = (int(width * ratio), int(height * ratio))
+                                    img = img.resize(new_size, Image.Resampling.LANCZOS)
+                            
+                            # 保存替换后的图片
+                            img.save(img_file, 'JPEG', quality=95)
+                            replaced_count += 1
+            
+            print(f"替换了 {replaced_count} 张图片")
+            
+            # 重新打包EPUB
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            with zipfile.ZipFile(output_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                for file_path in temp_dir.rglob('*'):
+                    if file_path.is_file():
+                        arcname = file_path.relative_to(temp_dir)
+                        zipf.write(file_path, arcname)
+            
+            # 清理临时目录
+            shutil.rmtree(temp_dir)
+            
+            print(f"EPUB创建完成: {output_path}")
+            
+            return ProcessingResult(
+                success=True,
+                message=f"EPUB创建成功，替换了 {replaced_count} 张图片"
+            )
+            
+        except Exception as e:
+            return ProcessingResult(
+                success=False,
+                message=f"EPUB创建失败: {str(e)}",
+                error=e
+            )
+    
+    def _create_epub_from_scratch(
         self,
         images: List[ProcessedImage],
         output_path: Path,
@@ -131,9 +224,9 @@ class EPUBBuilder:
         target_long_edge: int = 1872,
         resize_to_original: bool = False
     ) -> ProcessingResult:
-        """创建EPUB文件"""
+        """从头创建EPUB（旧方法，作为后备）"""
         try:
-            print("\n开始创建EPUB文件...")
+            print("使用后备方法创建EPUB...")
             
             # 创建新的EPUB
             book = epub.EpubBook()
@@ -165,7 +258,6 @@ class EPUBBuilder:
             # 并行处理其他图片
             print(f"使用 {self.max_workers} 个线程并行处理图片...")
             with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-                # 提交所有任务并保存页码映射
                 future_to_page = {
                     executor.submit(
                         self._process_image_parallel,
@@ -178,29 +270,21 @@ class EPUBBuilder:
                     for page_num, image in enumerate(images, 1)
                 }
                 
-                # 初始化结果列表，保持与输入图片相同的顺序
                 completed_chapters = [None] * len(images)
-                print(f"初始化结果列表，长度: {len(completed_chapters)}")
                 
-                # 收集并行处理的结果
                 for future in concurrent.futures.as_completed(future_to_page):
                     page_num = future_to_page[future]
                     try:
                         chapter = future.result()
-                        # 确保章节被放到正确的位置（索引 = 页码 - 1）
                         completed_chapters[page_num - 1] = chapter
-                        print(f"完成第 {page_num} 页处理，保存到索引 {page_num - 1}")
                     except Exception as e:
                         print(f"处理第 {page_num} 页时出错: {str(e)}")
                         raise
                 
-                # 验证所有章节都已处理完成
                 if None in completed_chapters:
                     missing_pages = [i + 1 for i, c in enumerate(completed_chapters) if c is None]
                     raise EPUBBuilderError(f"部分页面处理失败: {missing_pages}")
                 
-                print("所有章节处理完成，按顺序添加到EPUB中...")
-                # 按顺序添加章节到EPUB
                 for chapter in completed_chapters:
                     if chapter:
                         chapters.append(chapter)
@@ -255,7 +339,6 @@ class EPUBBuilder:
         if metadata.additional_metadata:
             for key, value in metadata.additional_metadata.items():
                 try:
-                    # 跳过单字符的键名
                     if ':' in key and len(key.split(':')[1]) > 1:
                         namespace, name = key.split(':', 1)
                         book.add_metadata(namespace, name, value)
@@ -301,7 +384,6 @@ class EPUBBuilder:
     ) -> None:
         """添加封面"""
         try:
-            # 获取超分辨率后的图片路径
             project_dir = cover_image.processed_path.parent.parent
             upscaled_path = self._find_upscaled_image(project_dir, cover_image.processed_path.name)
             if not upscaled_path:
@@ -309,7 +391,6 @@ class EPUBBuilder:
             
             print(f"处理封面图片: {upscaled_path}")
             
-            # 加载图片
             img = self.image_processor.load_image(upscaled_path)
             if not img:
                 raise EPUBBuilderError("加载封面图片失败")
@@ -375,6 +456,27 @@ class EPUBBuilder:
         except Exception as e:
             raise EPUBBuilderError(f"添加封面失败: {str(e)}")
     
+    def _process_image_parallel(
+        self,
+        book: epub.EpubBook,
+        image: ProcessedImage,
+        page_num: int,
+        target_long_edge: int,
+        resize_to_original: bool
+    ) -> epub.EpubHtml:
+        """并行处理单个图片章节"""
+        try:
+            return self._create_image_chapter(
+                book,
+                image,
+                page_num,
+                target_long_edge,
+                resize_to_original
+            )
+        except Exception as e:
+            print(f"处理第 {page_num} 页时出错: {str(e)}")
+            raise
+    
     def _create_image_chapter(
         self,
         book: epub.EpubBook,
@@ -390,8 +492,6 @@ class EPUBBuilder:
             upscaled_path = self._find_upscaled_image(project_dir, image.processed_path.name)
             if not upscaled_path:
                 raise EPUBBuilderError(f"找不到超分辨率处理后的图片: {image.processed_path.name}")
-            
-            print(f"处理第 {page_num} 页图片: {upscaled_path}")
             
             # 加载图片
             img = self.image_processor.load_image(upscaled_path)
@@ -455,4 +555,4 @@ class EPUBBuilder:
             return chapter
             
         except Exception as e:
-            raise EPUBBuilderError(f"创建图片章节失败: {str(e)}") 
+            raise EPUBBuilderError(f"创建图片章节失败: {str(e)}")
