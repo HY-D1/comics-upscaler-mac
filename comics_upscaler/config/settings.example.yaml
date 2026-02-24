@@ -1,0 +1,53 @@
+#  Comics Upscaler 配置文件示例
+#  使用方法：复制此文件为 settings.yaml 并修改为您自己的路径
+
+# 临时目录
+temp_dir: "temp"
+
+# 目录设置
+directories:
+  # 输入目录路径（存放 EPUB 文件的目录）
+  # 示例: "/Users/username/Documents/Comics" (macOS)
+  # 示例: "D:/电子书/漫画" (Windows)
+  input: "/Users/yourname/Documents/Comics"
+  
+  # 输出目录后缀（将添加到输入目录后）
+  output_suffix: "_upscale"
+
+# 超分辨率设置
+upscale:
+  # 使用的模型名称
+  # 可选: RealCUGAN_Conservative_2x.pth, RealCUGAN_Conservative_4x.pth
+  #       RealCUGAN_Pro_2x.pth, RealESRGAN_AnimeJaNai_HD_V3_Compact_2x.pth
+  model_name: "RealCUGAN_Conservative_2x.pth"
+  
+  # 放大倍数 (2x/3x/4x)
+  # 注意：需要与模型名称中的倍数一致
+  scale: 2
+  
+  # 目标长边尺寸（适配电子墨水屏/平板）
+  # 1600 适合 iPad/平板
+  # 2400 适合高分辨率屏幕
+  target_long_edge: 1600
+  
+  # 并行处理的进程数
+  # macOS Apple Silicon 建议: 1-2
+  # Windows NVIDIA GPU 建议: 4-8
+  num_processes: 1
+  
+  # 输出图片格式
+  output_format: "JPEG"
+  
+  # 输出图片质量 (1-100)
+  output_quality: 95
+
+# EPUB设置
+epub:
+  # 是否调整到原始大小
+  resize_to_original: false
+  
+  # 是否创建新的EPUB
+  create_new: false
+  
+  # 是否创建适配电子墨水屏的EPUB
+  create_eink: true
