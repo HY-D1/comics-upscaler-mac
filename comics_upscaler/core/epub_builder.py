@@ -153,6 +153,7 @@ class EPUBBuilder:
                 upscaled_path = self._find_upscaled_image(project_dir, img.processed_path.name)
                 if upscaled_path:
                     # 映射 1: 原始EPUB中的文件名 -> 超分图片路径
+                    # original_path 现在是相对路径如 "images/00001.jpeg"
                     orig_filename = img.original_path.name
                     image_map[orig_filename] = upscaled_path
                     image_map[Path(orig_filename).stem] = upscaled_path
@@ -161,8 +162,14 @@ class EPUBBuilder:
                     proc_filename = img.processed_path.name
                     image_map[proc_filename] = upscaled_path
                     image_map[Path(proc_filename).stem] = upscaled_path
+                else:
+                    print(f"警告: 未找到图片 {img.processed_path.name} 的超分辨率版本")
             
             print(f"找到 {len(set(image_map.values()))} 张超分辨率图片")
+            
+            # 调试：打印一些映射示例
+            sample_keys = list(image_map.keys())[:4]
+            print(f"映射示例: {sample_keys}")
             
             # 替换图片
             replaced_count = 0

@@ -122,8 +122,9 @@ class ImageExtractor:
                             self.image_processor.save_image(img, image_path)
                             
                             # 记录图片信息
+                            # original_path 应该是图片在 EPUB 中的原始路径，用于后续替换
                             images.append(ProcessedImage(
-                                original_path=file_path,
+                                original_path=Path(matching_image),
                                 processed_path=image_path,
                                 page_number=page_num,
                                 width=img_info['size'][0],
