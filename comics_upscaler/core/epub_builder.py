@@ -49,37 +49,52 @@ class EPUBBuilder:
             base_name = Path(image_name).stem  # e.g., "00074" or "page_0001"
             
             # 构建可能的文件名模式
-            # Final2x-core 会在文件名前添加 "4x-" 前缀，并可能改变扩展名
+            # Final2x-core 会根据放大倍数添加前缀（如 2x-, 4x-）
             patterns = [
-                f"4x-{base_name}.*",  # 4x-00074.png
-                f"{base_name}.*",      # 00074.png
-                f"4x-page_*.png",      # 如果base_name是page_XXX格式
+                f"*{base_name}.*",           # 匹配任意前缀的 base_name
+                f"[0-9]x-{base_name}.*",     # 1x-, 2x-, 4x- 等前缀
             ]
             
             # 在所有batch目录中查找
-            for pattern in patterns:
-                for batch_dir in project_dir.glob('upscaled/batch_*/outputs'):
-                    if batch_dir.exists():
-                        matches = list(batch_dir.glob(pattern))
-                        if matches:
-                            return matches[0]
-                        
-                # 也在主输出目录中查找
-                main_output = project_dir / 'upscaled' / 'outputs'
-                if main_output.exists():
-                    matches = list(main_output.glob(pattern))
-                    if matches:
-                        return matches[0]
-            
-            # 如果按文件名找不到，尝试在所有batch目录中搜索所有文件
-            # 并返回第一个找到的文件（作为后备方案）
+            all_matches = []
             for batch_dir in project_dir.glob('upscaled/batch_*/outputs'):
                 if batch_dir.exists():
-                    files = list(batch_dir.glob('*.png')) + list(batch_dir.glob('*.jpg'))
-                    if files:
-                        # 按文件名排序并尝试匹配页码
-                        for f in sorted(files):
+                    for pattern in patterns:
+                        matches = list(batch_dir.glob(pattern))
+                        if matches:
+                            all_matches.extend(matches)
+                        
+            # 也在主输出目录中查找
+            main_output = project_dir / 'upscaled' / 'outputs'
+            if main_output.exists():
+                for pattern in patterns:
+                    matches = list(main_output.glob(pattern))
+                    if matches:
+                        all_matches.extend(matches)
+            
+            # 如果找到匹配，返回第一个
+            if all_matches:
+                return all_matches[0]
+            
+            # 如果按文件名找不到，尝试在所有batch目录中搜索所有文件
+            # 并按文件名排序，尝试找到对应页码的文件
+            all_files = []
+            for batch_dir in project_dir.glob('upscaled/batch_*/outputs'):
+                if batch_dir.exists():
+                    all_files.extend(batch_dir.glob('*.png'))
+                    all_files.extend(batch_dir.glob('*.jpg'))
+            
+            if all_files:
+                # 尝试从原始文件名中提取页码数字
+                page_match = re.search(r'(\d+)', base_name)
+                if page_match:
+                    page_num = page_match.group(1)
+                    # 查找包含相同页码的文件
+                    for f in all_files:
+                        if page_num in f.stem:
                             return f
+                # 如果没有匹配到，返回第一个文件
+                return sorted(all_files)[0]
             
             return None
             
