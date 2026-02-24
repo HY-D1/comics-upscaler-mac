@@ -56,7 +56,13 @@ def process_single_file(
         
         # 创建处理器实例
         extractor = ImageExtractor(config.temp_dir)
-        upscaler = Upscaler(Path("Final2X/Final2x-core.exe"))
+        # 获取 Final2x-core 路径（支持 macOS 和 Windows）
+        base_path = get_base_path()
+        if sys.platform == 'darwin':  # macOS
+            final2x_path = base_path.parent / "Final2X" / "Final2x-core"
+        else:  # Windows
+            final2x_path = Path("Final2X/Final2x-core.exe")
+        upscaler = Upscaler(final2x_path)
         epub_builder = EPUBBuilder()
         
         try:

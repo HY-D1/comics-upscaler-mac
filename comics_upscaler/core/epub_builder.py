@@ -45,24 +45,24 @@ class EPUBBuilder:
             图片路径，如果找不到则返回None
         """
         try:
-            # 从原始文件名中提取页码
-            match = re.search(r'page_(\d+)', image_name)
-            if not match:
-                return None
-            page_num = match.group(1)
+            # 从文件名中提取基本名称（不含扩展名）
+            base_name = Path(image_name).stem  # e.g., "00074" or "page_0001"
             
             # 构建可能的文件名模式
+            # Final2x-core 会在文件名前添加 "4x-" 前缀，并可能改变扩展名
             patterns = [
-                f"4x-page_{page_num}.*",  # 4x-page_0001.png
-                f"page_{page_num}.*",      # page_0001.png
+                f"4x-{base_name}.*",  # 4x-00074.png
+                f"{base_name}.*",      # 00074.png
+                f"4x-page_*.png",      # 如果base_name是page_XXX格式
             ]
             
             # 在所有batch目录中查找
             for pattern in patterns:
                 for batch_dir in project_dir.glob('upscaled/batch_*/outputs'):
-                    matches = list(batch_dir.glob(pattern))
-                    if matches:
-                        return matches[0]
+                    if batch_dir.exists():
+                        matches = list(batch_dir.glob(pattern))
+                        if matches:
+                            return matches[0]
                         
                 # 也在主输出目录中查找
                 main_output = project_dir / 'upscaled' / 'outputs'
@@ -70,6 +70,16 @@ class EPUBBuilder:
                     matches = list(main_output.glob(pattern))
                     if matches:
                         return matches[0]
+            
+            # 如果按文件名找不到，尝试在所有batch目录中搜索所有文件
+            # 并返回第一个找到的文件（作为后备方案）
+            for batch_dir in project_dir.glob('upscaled/batch_*/outputs'):
+                if batch_dir.exists():
+                    files = list(batch_dir.glob('*.png')) + list(batch_dir.glob('*.jpg'))
+                    if files:
+                        # 按文件名排序并尝试匹配页码
+                        for f in sorted(files):
+                            return f
             
             return None
             
