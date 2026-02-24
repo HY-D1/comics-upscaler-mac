@@ -145,30 +145,48 @@ class EPUBBuilder:
             with zipfile.ZipFile(original_epub_path, 'r') as zip_ref:
                 zip_ref.extractall(temp_dir)
             
-            # 构建图片映射表
+            # 构建图片映射表 - 支持多种匹配方式
             image_map = {}
             for img in images:
                 project_dir = img.processed_path.parent.parent
+                # 使用 processed_path（提取后的文件名）来查找超分图片
                 upscaled_path = self._find_upscaled_image(project_dir, img.processed_path.name)
                 if upscaled_path:
-                    # 使用原始文件名作为键
+                    # 映射 1: 原始EPUB中的文件名 -> 超分图片路径
                     orig_filename = img.original_path.name
                     image_map[orig_filename] = upscaled_path
-                    # 也添加 basename 作为键（用于不同扩展名的情况）
                     image_map[Path(orig_filename).stem] = upscaled_path
+                    
+                    # 映射 2: 提取后的文件名 -> 超分图片路径
+                    proc_filename = img.processed_path.name
+                    image_map[proc_filename] = upscaled_path
+                    image_map[Path(proc_filename).stem] = upscaled_path
             
-            print(f"找到 {len(image_map)} 张超分辨率图片")
+            print(f"找到 {len(set(image_map.values()))} 张超分辨率图片")
             
             # 替换图片
             replaced_count = 0
             for img_file in temp_dir.rglob('*'):
                 if img_file.is_file() and img_file.suffix.lower() in ['.jpg', '.jpeg', '.png']:
-                    # 尝试匹配
+                    # 尝试多种匹配方式
                     upscaled_path = None
+                    
+                    # 方式1: 完整文件名匹配
                     if img_file.name in image_map:
                         upscaled_path = image_map[img_file.name]
+                    # 方式2: stem 匹配
                     elif img_file.stem in image_map:
                         upscaled_path = image_map[img_file.stem]
+                    # 方式3: 数字部分匹配（如 00001 匹配 page_0001）
+                    else:
+                        page_num_match = re.search(r'(\d+)', img_file.stem)
+                        if page_num_match:
+                            page_num = page_num_match.group(1)
+                            # 尝试匹配 page_XXXX 格式
+                            for key, path in image_map.items():
+                                if f'page_{page_num}' in key or page_num in key:
+                                    upscaled_path = path
+                                    break
                     
                     if upscaled_path and upscaled_path.exists():
                         # 处理图片（调整尺寸）
