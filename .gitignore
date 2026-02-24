@@ -1,4 +1,4 @@
-# 个人配置文件（包含本地路径）
+# 个人配置文件（包含本地路径）- 必须在前面
 comics_upscaler/config/settings.yaml
 
 # Python
@@ -27,6 +27,7 @@ wheels/
 temp/
 projects/
 *.epub
+Final2X/
 Final2X/*.7z
 
 # IDE
@@ -41,4 +42,3 @@ Final2X/*.7z
 
 # 日志
 *.log
-Final2X/
